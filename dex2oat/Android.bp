@@ -186,6 +186,7 @@ art_cc_binary {
             },
         },
     },
+    quicksilver: true,
 }
 
 art_cc_binary {

@@ -50,6 +50,7 @@ art_cc_library {
             },
         },
     },
+    quicksilver: true,
 }
 
 art_cc_library {
