@@ -380,9 +380,16 @@ bool HInstructionBuilder::Build() {
         AppendInstruction(new (allocator_) HNativeDebugInfo(dex_pc));
       }
 
+      // Note: There may be no Thread for gtests.
+      DCHECK(Thread::Current() == nullptr || !Thread::Current()->IsExceptionPending())
+          << dex_file_->PrettyMethod(dex_compilation_unit_->GetDexMethodIndex())
+          << " " << pair.Inst().Name() << "@" << dex_pc;
       if (!ProcessDexInstruction(pair.Inst(), dex_pc, quicken_index)) {
         return false;
       }
+      DCHECK(Thread::Current() == nullptr || !Thread::Current()->IsExceptionPending())
+          << dex_file_->PrettyMethod(dex_compilation_unit_->GetDexMethodIndex())
+          << " " << pair.Inst().Name() << "@" << dex_pc;
 
       if (QuickenInfoTable::NeedsIndexForInstruction(&pair.Inst())) {
         ++quicken_index;
@@ -844,6 +851,7 @@ static ArtMethod* ResolveMethod(uint16_t method_idx,
     soa.Self()->ClearException();
     return nullptr;
   }
+  DCHECK(!soa.Self()->IsExceptionPending());
 
   // The referrer may be unresolved for AOT if we're compiling a class that cannot be
   // resolved because, for example, we don't find a superclass in the classpath.
@@ -959,6 +967,7 @@ bool HInstructionBuilder::BuildInvoke(const Instruction& instruction,
                                              &is_string_constructor);
 
   if (UNLIKELY(resolved_method == nullptr)) {
+    DCHECK(!Thread::Current()->IsExceptionPending());
     MaybeRecordStat(compilation_stats_,
                     MethodCompilationStat::kUnresolvedMethod);
     HInvoke* invoke = new (allocator_) HInvokeUnresolved(allocator_,
@@ -1346,18 +1355,18 @@ bool HInstructionBuilder::IsInitialized(ObjPtr<mirror::Class> cls) const {
 
   // Check if the class will be initialized at runtime.
   if (cls->IsInitialized()) {
-    Runtime* runtime = Runtime::Current();
-    if (runtime->IsAotCompiler()) {
+    const CompilerOptions& compiler_options = code_generator_->GetCompilerOptions();
+    if (compiler_options.IsAotCompiler()) {
       // Assume loaded only if klass is in the boot image. App classes cannot be assumed
       // loaded because we don't even know what class loader will be used to load them.
-      if (IsInBootImage(cls, code_generator_->GetCompilerOptions())) {
+      if (IsInBootImage(cls, compiler_options)) {
         return true;
       }
     } else {
-      DCHECK(runtime->UseJitCompilation());
+      DCHECK(compiler_options.IsJitCompiler());
       if (Runtime::Current()->GetJit()->CanAssumeInitialized(
               cls,
-              graph_->IsCompilingForSharedJitCode())) {
+              compiler_options.IsJitCompilerForSharedCode())) {
         // For JIT, the class cannot revert to an uninitialized state.
         return true;
       }
@@ -1890,7 +1899,11 @@ ArtField* HInstructionBuilder::ResolveField(uint16_t field_idx, bool is_static, 
                                                         dex_compilation_unit_->GetDexCache(),
                                                         class_loader,
                                                         is_static);
-  DCHECK_EQ(resolved_field == nullptr, soa.Self()->IsExceptionPending());
+  DCHECK_EQ(resolved_field == nullptr, soa.Self()->IsExceptionPending())
+      << "field="
+      << ((resolved_field == nullptr) ? "null" : resolved_field->PrettyField())
+      << ", exception="
+      << (soa.Self()->IsExceptionPending() ? soa.Self()->GetException()->Dump() : "null");
   if (UNLIKELY(resolved_field == nullptr)) {
     // Clean up any exception left by field resolution.
     soa.Self()->ClearException();

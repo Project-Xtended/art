@@ -379,7 +379,6 @@ class OptimizingCompiler final : public Compiler {
                             ArtMethod* method,
                             bool baseline,
                             bool osr,
-                            bool is_shared_jit_code,
                             VariableSizedHandleScope* handles) const;
 
   CodeGenerator* TryCompileIntrinsic(ArenaAllocator* allocator,
@@ -399,7 +398,7 @@ class OptimizingCompiler final : public Compiler {
                                 const DexCompilationUnit& dex_compilation_unit,
                                 PassObserver* pass_observer) const;
 
-  void GenerateJitDebugInfo(const debug::MethodDebugInfo& method_debug_info);
+  std::vector<uint8_t> GenerateJitDebugInfo(const debug::MethodDebugInfo& method_debug_info);
 
   std::unique_ptr<OptimizingCompilerStats> compilation_stats_;
 
@@ -733,7 +732,6 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
                                               ArtMethod* method,
                                               bool baseline,
                                               bool osr,
-                                              bool is_shared_jit_code,
                                               VariableSizedHandleScope* handles) const {
   MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kAttemptBytecodeCompilation);
   const CompilerOptions& compiler_options = GetCompilerOptions();
@@ -803,7 +801,6 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
       dead_reference_safe,
       compiler_options.GetDebuggable(),
       /* osr= */ osr,
-      /* is_shared_jit_code= */ is_shared_jit_code,
       /* baseline= */ baseline);
 
   if (method != nullptr) {
@@ -1006,6 +1003,7 @@ CompiledMethod* OptimizingCompiler::Compile(const dex::CodeItem* code_item,
                                             const DexFile& dex_file,
                                             Handle<mirror::DexCache> dex_cache) const {
   const CompilerOptions& compiler_options = GetCompilerOptions();
+  DCHECK(compiler_options.IsAotCompiler());
   CompiledMethod* compiled_method = nullptr;
   Runtime* runtime = Runtime::Current();
   DCHECK(runtime->IsAotCompiler());
@@ -1064,7 +1062,6 @@ CompiledMethod* OptimizingCompiler::Compile(const dex::CodeItem* code_item,
                        method,
                        compiler_options.IsBaseline(),
                        /* osr= */ false,
-                       /* is_shared_jit_code= */ false,
                        &handles));
       }
     }
@@ -1213,6 +1210,9 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                                     bool baseline,
                                     bool osr,
                                     jit::JitLogger* jit_logger) {
+  const CompilerOptions& compiler_options = GetCompilerOptions();
+  DCHECK(compiler_options.IsJitCompiler());
+  DCHECK_EQ(compiler_options.IsJitCompilerForSharedCode(), code_cache->IsSharedRegion(*region));
   StackHandleScope<3> hs(self);
   Handle<mirror::ClassLoader> class_loader(hs.NewHandle(
       method->GetDeclaringClass()->GetClassLoader()));
@@ -1229,7 +1229,6 @@ bool OptimizingCompiler::JitCompile(Thread* self,
   ArenaAllocator allocator(runtime->GetJitArenaPool());
 
   if (UNLIKELY(method->IsNative())) {
-    const CompilerOptions& compiler_options = GetCompilerOptions();
     JniCompiledMethod jni_compiled_method = ArtQuickJniCompileMethod(
         compiler_options, access_flags, method_idx, *dex_file);
     std::vector<Handle<mirror::Object>> roots;
@@ -1257,6 +1256,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
     const uint8_t* code = reserved_code.data() + OatQuickMethodHeader::InstructionAlignedSize();
 
     // Add debug info after we know the code location but before we update entry-point.
+    std::vector<uint8_t> debug_info;
     if (compiler_options.GenerateAnyDebugInfo()) {
       debug::MethodDebugInfo info = {};
       info.custom_name = "art_jni_trampoline";
@@ -1275,7 +1275,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
       info.frame_size_in_bytes = jni_compiled_method.GetFrameSize();
       info.code_info = nullptr;
       info.cfi = jni_compiled_method.GetCfi();
-      GenerateJitDebugInfo(info);
+      debug_info = GenerateJitDebugInfo(info);
     }
 
     if (!code_cache->Commit(self,
@@ -1286,6 +1286,8 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                             reserved_data,
                             roots,
                             ArrayRef<const uint8_t>(stack_map),
+                            debug_info,
+                            /* is_full_debug_info= */ compiler_options.GetGenerateDebugInfo(),
                             osr,
                             /* has_should_deoptimize_flag= */ false,
                             cha_single_implementation_list)) {
@@ -1327,9 +1329,8 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                    &code_allocator,
                    dex_compilation_unit,
                    method,
-                   baseline || GetCompilerOptions().IsBaseline(),
+                   baseline || compiler_options.IsBaseline(),
                    osr,
-                   /* is_shared_jit_code= */ code_cache->IsSharedRegion(*region),
                    &handles));
     if (codegen.get() == nullptr) {
       return false;
@@ -1364,7 +1365,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                      }));
 
   // Add debug info after we know the code location but before we update entry-point.
-  const CompilerOptions& compiler_options = GetCompilerOptions();
+  std::vector<uint8_t> debug_info;
   if (compiler_options.GenerateAnyDebugInfo()) {
     debug::MethodDebugInfo info = {};
     DCHECK(info.custom_name.empty());
@@ -1383,7 +1384,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
     info.frame_size_in_bytes = codegen->GetFrameSize();
     info.code_info = stack_map.size() == 0 ? nullptr : stack_map.data();
     info.cfi = ArrayRef<const uint8_t>(*codegen->GetAssembler()->cfi().data());
-    GenerateJitDebugInfo(info);
+    debug_info = GenerateJitDebugInfo(info);
   }
 
   if (!code_cache->Commit(self,
@@ -1394,6 +1395,8 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                           reserved_data,
                           roots,
                           ArrayRef<const uint8_t>(stack_map),
+                          debug_info,
+                          /* is_full_debug_info= */ compiler_options.GetGenerateDebugInfo(),
                           osr,
                           codegen->GetGraph()->HasShouldDeoptimizeFlag(),
                           codegen->GetGraph()->GetCHASingleImplementationList())) {
@@ -1422,7 +1425,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
   return true;
 }
 
-void OptimizingCompiler::GenerateJitDebugInfo(const debug::MethodDebugInfo& info) {
+std::vector<uint8_t> OptimizingCompiler::GenerateJitDebugInfo(const debug::MethodDebugInfo& info) {
   const CompilerOptions& compiler_options = GetCompilerOptions();
   if (compiler_options.GenerateAnyDebugInfo()) {
     // If both flags are passed, generate full debug info.
@@ -1431,13 +1434,9 @@ void OptimizingCompiler::GenerateJitDebugInfo(const debug::MethodDebugInfo& info
     // Create entry for the single method that we just compiled.
     InstructionSet isa = compiler_options.GetInstructionSet();
     const InstructionSetFeatures* features = compiler_options.GetInstructionSetFeatures();
-    std::vector<uint8_t> elf = debug::MakeElfFileForJIT(isa, features, mini_debug_info, info);
-
-    // NB: Don't allow packing of full info since it would remove non-backtrace data.
-    MutexLock mu(Thread::Current(), *Locks::jit_lock_);
-    const void* code_ptr = reinterpret_cast<const void*>(info.code_address);
-    AddNativeDebugInfoForJit(code_ptr, elf, /*allow_packing=*/ mini_debug_info);
+    return debug::MakeElfFileForJIT(isa, features, mini_debug_info, info);
   }
+  return std::vector<uint8_t>();
 }
 
 }  // namespace art
