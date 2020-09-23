@@ -436,8 +436,8 @@ void HInstructionBuilder::BuildIntrinsic(ArtMethod* method) {
     // normally use an HInvokeVirtual (sharpen the call).
     MethodReference target_method(dex_file_, method_idx);
     HInvokeStaticOrDirect::DispatchInfo dispatch_info = {
-        HInvokeStaticOrDirect::MethodLoadKind::kRuntimeCall,
-        HInvokeStaticOrDirect::CodePtrLocation::kCallArtMethod,
+        MethodLoadKind::kRuntimeCall,
+        CodePtrLocation::kCallArtMethod,
         /* method_load_data= */ 0u
     };
     InvokeType invoke_type = dex_compilation_unit_->IsStatic() ? kStatic : kDirect;
@@ -974,8 +974,8 @@ bool HInstructionBuilder::BuildInvoke(const Instruction& instruction,
   if (is_string_constructor) {
     uint32_t string_init_entry_point = WellKnownClasses::StringInitToEntryPoint(resolved_method);
     HInvokeStaticOrDirect::DispatchInfo dispatch_info = {
-        HInvokeStaticOrDirect::MethodLoadKind::kStringInit,
-        HInvokeStaticOrDirect::CodePtrLocation::kCallArtMethod,
+        MethodLoadKind::kStringInit,
+        CodePtrLocation::kCallArtMethod,
         dchecked_integral_cast<uint64_t>(string_init_entry_point)
     };
     // We pass null for the resolved_method to ensure optimizations
@@ -1025,8 +1025,7 @@ bool HInstructionBuilder::BuildInvoke(const Instruction& instruction,
 
     HInvokeStaticOrDirect::DispatchInfo dispatch_info =
         HSharpening::SharpenInvokeStaticOrDirect(resolved_method, code_generator_);
-    if (dispatch_info.code_ptr_location ==
-            HInvokeStaticOrDirect::CodePtrLocation::kCallCriticalNative) {
+    if (dispatch_info.code_ptr_location == CodePtrLocation::kCallCriticalNative) {
       graph_->SetHasDirectCriticalNativeCall(true);
     }
     invoke = new (allocator_) HInvokeStaticOrDirect(allocator_,

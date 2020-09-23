@@ -4390,7 +4390,7 @@ void LocationsBuilderARM64::VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* inv
     return;
   }
 
-  if (invoke->GetCodePtrLocation() == HInvokeStaticOrDirect::CodePtrLocation::kCallCriticalNative) {
+  if (invoke->GetCodePtrLocation() == CodePtrLocation::kCallCriticalNative) {
     CriticalNativeCallingConventionVisitorARM64 calling_convention_visitor(
         /*for_register_allocation=*/ true);
     CodeGenerator::CreateCommonInvokeLocationSummary(invoke, &calling_convention_visitor);
@@ -4420,17 +4420,17 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
   // Make sure that ArtMethod* is passed in kArtMethodRegister as per the calling convention.
   Location callee_method = temp;  // For all kinds except kRecursive, callee will be in temp.
   switch (invoke->GetMethodLoadKind()) {
-    case HInvokeStaticOrDirect::MethodLoadKind::kStringInit: {
+    case MethodLoadKind::kStringInit: {
       uint32_t offset =
           GetThreadOffset<kArm64PointerSize>(invoke->GetStringInitEntryPoint()).Int32Value();
       // temp = thread->string_init_entrypoint
       __ Ldr(XRegisterFrom(temp), MemOperand(tr, offset));
       break;
     }
-    case HInvokeStaticOrDirect::MethodLoadKind::kRecursive:
+    case MethodLoadKind::kRecursive:
       callee_method = invoke->GetLocations()->InAt(invoke->GetCurrentMethodIndex());
       break;
-    case HInvokeStaticOrDirect::MethodLoadKind::kBootImageLinkTimePcRelative: {
+    case MethodLoadKind::kBootImageLinkTimePcRelative: {
       DCHECK(GetCompilerOptions().IsBootImage() || GetCompilerOptions().IsBootImageExtension());
       // Add ADRP with its PC-relative method patch.
       vixl::aarch64::Label* adrp_label = NewBootImageMethodPatch(invoke->GetTargetMethod());
@@ -4441,7 +4441,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       EmitAddPlaceholder(add_label, XRegisterFrom(temp), XRegisterFrom(temp));
       break;
     }
-    case HInvokeStaticOrDirect::MethodLoadKind::kBootImageRelRo: {
+    case MethodLoadKind::kBootImageRelRo: {
       // Add ADRP with its PC-relative .data.bimg.rel.ro patch.
       uint32_t boot_image_offset = GetBootImageOffset(invoke);
       vixl::aarch64::Label* adrp_label = NewBootImageRelRoPatch(boot_image_offset);
@@ -4452,7 +4452,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       EmitLdrOffsetPlaceholder(ldr_label, WRegisterFrom(temp), XRegisterFrom(temp));
       break;
     }
-    case HInvokeStaticOrDirect::MethodLoadKind::kBssEntry: {
+    case MethodLoadKind::kBssEntry: {
       // Add ADRP with its PC-relative .bss entry patch.
       MethodReference target_method(&GetGraph()->GetDexFile(), invoke->GetDexMethodIndex());
       vixl::aarch64::Label* adrp_label = NewMethodBssEntryPatch(target_method);
@@ -4464,11 +4464,11 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       EmitLdrOffsetPlaceholder(ldr_label, XRegisterFrom(temp), XRegisterFrom(temp));
       break;
     }
-    case HInvokeStaticOrDirect::MethodLoadKind::kJitDirectAddress:
+    case MethodLoadKind::kJitDirectAddress:
       // Load method address from literal pool.
       __ Ldr(XRegisterFrom(temp), DeduplicateUint64Literal(invoke->GetMethodAddress()));
       break;
-    case HInvokeStaticOrDirect::MethodLoadKind::kRuntimeCall: {
+    case MethodLoadKind::kRuntimeCall: {
       GenerateInvokeStaticOrDirectRuntimeCall(invoke, temp, slow_path);
       return;  // No code pointer retrieval; the runtime performs the call directly.
     }
@@ -4488,7 +4488,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
     }
   };
   switch (invoke->GetCodePtrLocation()) {
-    case HInvokeStaticOrDirect::CodePtrLocation::kCallSelf:
+    case CodePtrLocation::kCallSelf:
       {
         // Use a scope to help guarantee that `RecordPcInfo()` records the correct pc.
         ExactAssemblyScope eas(GetVIXLAssembler(),
@@ -4498,7 +4498,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
         RecordPcInfo(invoke, invoke->GetDexPc(), slow_path);
       }
       break;
-    case HInvokeStaticOrDirect::CodePtrLocation::kCallCriticalNative: {
+    case CodePtrLocation::kCallCriticalNative: {
       size_t out_frame_size =
           PrepareCriticalNativeCall<CriticalNativeCallingConventionVisitorARM64,
                                     kAapcs64StackAlignment,
@@ -4533,7 +4533,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       }
       break;
     }
-    case HInvokeStaticOrDirect::CodePtrLocation::kCallArtMethod:
+    case CodePtrLocation::kCallArtMethod:
       call_code_pointer_member(ArtMethod::EntryPointFromQuickCompiledCodeOffset(kArm64PointerSize));
       break;
   }
