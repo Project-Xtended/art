@@ -169,6 +169,7 @@
   V(MemoryPokeLongNative, kStatic, kNeedsEnvironment, kWriteSideEffects, kCanThrow, "Llibcore/io/Memory;", "pokeLongNative", "(JJ)V") \
   V(MemoryPokeShortNative, kStatic, kNeedsEnvironment, kWriteSideEffects, kCanThrow, "Llibcore/io/Memory;", "pokeShortNative", "(JS)V") \
   V(FP16Ceil, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "ceil", "(S)S") \
+  V(FP16Compare, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "compare", "(SS)I") \
   V(FP16Floor, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "floor", "(S)S") \
   V(FP16Rint, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "rint", "(S)S") \
   V(FP16ToFloat, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "toFloat", "(S)F") \
@@ -177,6 +178,8 @@
   V(FP16GreaterEquals, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "greaterEquals", "(SS)Z") \
   V(FP16Less, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "less", "(SS)Z") \
   V(FP16LessEquals, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "lessEquals", "(SS)Z") \
+  V(FP16Min, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "min", "(SS)S") \
+  V(FP16Max, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Llibcore/util/FP16;", "max", "(SS)S") \
   V(StringCharAt, kVirtual, kNeedsEnvironment, kReadSideEffects, kCanThrow, "Ljava/lang/String;", "charAt", "(I)C") \
   V(StringCompareTo, kVirtual, kNeedsEnvironment, kReadSideEffects, kCanThrow, "Ljava/lang/String;", "compareTo", "(Ljava/lang/String;)I") \
   V(StringEquals, kVirtual, kNeedsEnvironment, kReadSideEffects, kCanThrow, "Ljava/lang/String;", "equals", "(Ljava/lang/Object;)Z") \
